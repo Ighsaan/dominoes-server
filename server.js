@@ -5,8 +5,8 @@ var path = require('path');
 var server = require('http').createServer(app);
 var io = require('socket.io')(server);
 
-const Game = require("./services/game")
 const Player = require("./services/player")
+const Pool = require("./services/pool")
 
 const PORT = process.env.PORT || 4001;;
 server.listen(PORT, () => {
@@ -15,9 +15,6 @@ server.listen(PORT, () => {
 
 app.use(cors())
 app.use(express.static(path.join(__dirname, 'public')));
-
-const games = {};
-
 
 app.get("/lobby", (req, res) => {
   let rooms = io.sockets.adapter.rooms;
@@ -32,87 +29,64 @@ app.get("/lobby", (req, res) => {
   });
 });
 
-io.on('connection', (socket) => {
-  socket.on('addPlayer', (data) => {
-    let username = data.username;
-    let roomId = data.roomId;
-    let room = games[roomId];
-    let instance = room.instance
-    let numUsers = instance.size();
-    if(numUsers == 4) {
-      socket.disconnect();
-      return;
-    }
-    socket.username = username;
-    instance.addPlayer(new Player(numUsers, username, socket.id));
-    socket.join(roomId)
-    io.to(roomId).emit('state', instance.getState());
+const init = (io, username, instance, socket) => {
+  socket.username = username;
+  instance.addPlayer(new Player(username, socket.id));
+  socket.join(instance.id);
+  io.to(instance.id).emit('state', instance.getState());
+}
 
-    if(instance.canStart()) {
-      io.to(room.host).emit('start', true);
+const broadcastState = (instance, socket) => {
+  instance.players.forEach(player => {
+    let playerState = instance.getState(player.socketId);
+    if(player.socketId === socket.id){
+      socket.emit("state", playerState)
+    } else {
+      socket.to(player.socketId).emit("state", playerState)
     }
   });
+}
 
+const pool = new Pool();
+io.on('connection', (socket) => {
+  
   socket.on('createGame', (username) => {
-    socket.username = username;
-    var instance = new Game();
-    let roomId = instance.id
-    games[roomId] = {instance: instance, host: socket.id};
-    instance.addPlayer(new Player(0, username, socket.id));
-    socket.join(roomId)
-    io.to(roomId).emit('state', instance.getState());
+    let instance = pool.createGame(socket.id).instance;
+    init(io, username, instance, socket);
+  });
+
+  socket.on('addPlayer', ({ username, roomId }) => {
+    let game = pool.getGame(roomId);
+    if(!game && game.instance.canStart()) {
+      socket.disconnect();
+    } else {
+      init(io, username, game.instance, socket);
+      io.to(game.host).emit('start', game.instance.canStart());
+    }
   });
 
   socket.on('startGame', (roomId) => {
-    if(games.hasOwnProperty(roomId)) {
-      let room = games[roomId];
-      if(room.host === socket.id) {
-        let instance = room.instance;
-        instance.startGame();
-        
-        
-        //pull this out to a method
-        instance.players.forEach(x => {
-          let playerState = instance.getState(x.socketId);
-          if(x.socketId === socket.id){
-            socket.emit("state", playerState)
-          } else {
-            socket.to(x.socketId).emit("state", playerState)
-          }
-        })
-
-      }
+    let game = pool.getGame(roomId);
+    if(game && game.isHost(socket.id)) {
+      let instance = game.instance;
+      instance.startGame();
+      broadcastState(instance, socket);
     }
   });
 
   socket.on('playCard', (data) => {
-    let instance = games[data.roomId].instance;
+    let instance = pool.getGame(data.roomId).instance;
     let player = instance.players.find(x => x.socketId === socket.id);
     instance.playCard(player, data.card, data.side);
-
-    instance.players.forEach(x => {
-      let playerState = instance.getState(x.socketId);
-      if(x.socketId === socket.id){
-        socket.emit("state", playerState)
-      } else {
-        socket.to(x.socketId).emit("state", playerState)
-      }
-    })
+    broadcastState(instance, socket);
   });
 
-  socket.on('passTurn', (data) => {
-    let instance = games[data.roomId].instance;
+  socket.on('passTurn', (roomId) => {
+    let instance = pool.getGame(roomId).instance;
     let player = instance.players.find(x => x.socketId === socket.id);
-    instance.passTurn(player);
-
-    instance.players.forEach(x => {
-      let playerState = instance.getState(x.socketId);
-      if(x.socketId === socket.id){
-        socket.emit("state", playerState)
-      } else {
-        socket.to(x.socketId).emit("state", playerState)
-      }
-    })
+    if(instance.passTurn(player)){
+      broadcastState(instance, socket);
+    } //send direct message to client
   });
 
   // when the user disconnects.. perform this

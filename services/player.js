@@ -1,8 +1,8 @@
 const _ = require("lodash")
 
 class Player {
-    constructor(id, name, socketId) {
-        this.id = id;
+    constructor(name, socketId) {
+        this.id = -1;
         this.name = name;
         this.socketId = socketId;
         this.cards = [];

@@ -4,18 +4,19 @@ const STATE = require("../data/states")
 const Board = require('./board')
 const {Deck, DOUBLESIX} = require('./deck')
 
-const ROOM_ID_PREFIX = "ROOM-";
 class Game {
 
-    constructor() {
+    constructor(id) {
         this.board = new Board();
         this.players = [];
         this.gameState = STATE.NEW;
-        this.id = ROOM_ID_PREFIX + Math.floor(Math.random() * (9999 - 1000) + 1000)
+        this.id = id
     }
 
     addPlayer(player) {
-        if(this.players.length <= 4) {
+        let size = this.size();
+        player.id = size;
+        if(size <= 4) {
             this.players.push(player)
             this.gameState = STATE.WAITING
         }
@@ -44,9 +45,9 @@ class Game {
     playCard(player, card, side) {
         card = player.hasCard(card);
         if(player.turn && card) {
-            player.removeCard(card);
             var result = this.board.playCard(card, side)
             if(result) {
+                player.removeCard(card);
                 if(this.isRoundFinish()) {
                     this.gameState = STATE.END
                 } else {
@@ -58,8 +59,20 @@ class Game {
         return false;
     }
 
-    passTurn() {
-        this.setNextPlayerTurn();
+    passTurn(player) {
+        if(player.turn && !this.canPlay(player)) {
+            this.setNextPlayerTurn();
+            return true;
+        }
+        return false;
+    }
+
+    canPlay(player) {
+        if(this.board.state.length == 0) {
+            return true;
+        }
+        let sides = player.cards.flatMap(x => [x.left, x.right]);
+        return (_.intersection(sides, [this.board.getLeftSide(), this.board.getRightSide()]).length > 0)
     }
 
     isRoundFinish() {

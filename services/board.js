@@ -16,9 +16,9 @@ class Board {
         }
         if(side == sides.LEFT) {
             let isLeft = card.left == this.getLeftSide();
-            let isRight = card.right == this.getLeftSide()
+            let isRight = card.right == this.getLeftSide();
             let face = isLeft ? card.right : isRight ? card.left : null;
-            if(face) {
+            if(face != null) {
                 this.state.unshift({
                     card: card,
                     face: face
@@ -31,7 +31,7 @@ class Board {
             var isLeft = card.left == this.getRightSide();
             var isRight = card.right == this.getRightSide();
             let face = isLeft ? card.right : isRight ? card.left : null;
-            if(face) {
+            if(face != null) {
                 this.state.push({
                     card: card,
                     face: face
