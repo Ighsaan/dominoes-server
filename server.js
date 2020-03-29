@@ -14,7 +14,7 @@ server.listen(PORT, () => {
 });
 
 app.use(cors())
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'build')));
 
 app.get("/lobby", (req, res) => {
   let rooms = io.sockets.adapter.rooms;
@@ -27,6 +27,10 @@ app.get("/lobby", (req, res) => {
   res.json( {
     lobby: rooms
   });
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
 const init = (io, username, instance, socket) => {
